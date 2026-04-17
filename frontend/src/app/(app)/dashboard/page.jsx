@@ -6,6 +6,7 @@ import { Dashboard } from "@/components/Dashboard";
 import { useAnalysis } from "@/components/AnalysisContext";
 import { motion } from "framer-motion";
 import { FileSpreadsheet, Eye, Download } from "lucide-react";
+import { ChatComponent } from "@/components/ChatComponent";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -19,7 +20,8 @@ export default function DashboardPage() {
   }, [router]);
 
   return (
-    <div className="space-y-8 pb-8">
+    <div className="space-y-8 pb-8 relative">
+      <ChatComponent />
       {/* If we have active analysis results dynamically loaded from Context, show Dashboard, otherwise show the empty / mock Dashboard */}
       <Dashboard 
         results={results || {
