@@ -8,6 +8,8 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { useSettings } from "@/context/SettingsContext";
 import { formatCurrency } from "@/lib/format";
 
+import { useAnalysis } from "@/components/AnalysisContext";
+
 const MOCK_INSIGHTS = (currency) => [
   { id: 1, type: "opportunity", priority: "high", title: "Revenue Growth Trajectory", desc: "Your year-over-year revenue growth is tracking 15% above the industry median. Continue investment in the Enterprise sales channel.", time: "10 mins ago" },
   { id: 2, type: "risk", priority: "high", title: "Cash Flow Alert", desc: "Operating expenses grew by 8% last quarter while cash reserves dipped. Consider postponing capital expenditure for Q3.", time: "2 hours ago" },
@@ -18,9 +20,38 @@ const MOCK_INSIGHTS = (currency) => [
 
 export default function InsightsPage() {
   const { currency } = useSettings();
+  const { analysis } = useAnalysis();
   const [filter, setFilter] = useState("all");
 
-  const insights = MOCK_INSIGHTS(currency);
+  // Dynamically generate insights from AI analysis if available
+  const generateRealInsights = () => {
+    if (!analysis || !analysis.explanations) return MOCK_INSIGHTS(currency);
+
+    return analysis.explanations.map((expl, idx) => {
+      // Parse impact points like "-4.2 points" or "+4.2 points"
+      const impactNum = parseFloat(expl.impact) || 0;
+      const absImpact = Math.abs(impactNum);
+      
+      let priority = "low";
+      if (absImpact > 10) priority = "high";
+      else if (absImpact > 4) priority = "medium";
+
+      let type = "financial";
+      if (expl.direction === "positive") type = "opportunity";
+      if (expl.direction === "negative") type = "risk";
+
+      return {
+        id: `ai-${idx}`,
+        type,
+        priority,
+        title: expl.feature,
+        desc: expl.description,
+        time: "Just now"
+      };
+    });
+  };
+
+  const insights = analysis ? generateRealInsights() : MOCK_INSIGHTS(currency);
   const filteredInsights = insights.filter(insight => filter === "all" || insight.priority === filter);
 
   const getIcon = (type) => {

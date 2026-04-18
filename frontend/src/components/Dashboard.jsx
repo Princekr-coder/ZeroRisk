@@ -37,7 +37,44 @@ export function Dashboard({ onReset }) {
     );
   }
 
-  if (!analysis) return null;
+  if (!analysis) {
+    return (
+      <div className="w-full relative z-10">
+        <PageHeader 
+          title="Financial Overview"
+          description="Awaiting financial data for analysis."
+        >
+          <motion.button 
+            whileHover={{ scale: 1.05, boxShadow: "0 0 20px rgba(139, 92, 246, 0.4)" }}
+            whileTap={{ scale: 0.95 }}
+            onClick={onReset}
+            className="bg-gradient-to-r from-primary to-neon-cyan text-white px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center space-x-2 shadow-[0_4px_14px_rgba(139, 92, 246, 0.4)] transition-all cursor-pointer"
+          >
+            <Zap className="w-4 h-4" />
+            <span>New Analysis</span>
+          </motion.button>
+        </PageHeader>
+        
+        <div className="flex flex-col items-center justify-center p-12 mt-6 glass rounded-2xl border-2 border-dashed border-border/60 text-center">
+          <div className="w-16 h-16 bg-black/5 dark:bg-white/5 rounded-full flex items-center justify-center mb-4">
+            <LayoutTemplate className="w-8 h-8 text-muted-foreground" />
+          </div>
+          <h2 className="text-xl font-bold text-foreground mb-2">No active analysis</h2>
+          <p className="text-muted-foreground max-w-md mb-6">
+            Upload your company's financial statements to generate an AI-driven credit risk assessment and deep financial insights.
+          </p>
+          <motion.button 
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={onReset}
+            className="bg-primary hover:bg-primary/90 text-white border border-primary px-6 py-3 rounded-lg text-sm font-bold shadow-lg transition-colors cursor-pointer"
+          >
+            Upload Data Now
+          </motion.button>
+        </div>
+      </div>
+    );
+  }
 
   // Base values for metrics mock UI (could be replaced by backend data if available)
   const baseRevenue = 4200000;

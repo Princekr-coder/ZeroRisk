@@ -9,21 +9,9 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { useSettings } from "@/context/SettingsContext";
 import { convertValue } from "@/lib/currency";
 import { formatCurrency } from "@/lib/format";
+import { useAnalysis } from "@/components/AnalysisContext";
 
-// Mock Data generation based on scenario
-const getMockData = (scenario) => {
-  const baseData = [
-    { name: 'Q1', revenue: 420000, profit: 84000 },
-    { name: 'Q2', revenue: 450000, profit: 91000 },
-    { name: 'Q3', revenue: 480000, profit: 96000 },
-  ];
-  
-  if (scenario === 'best') return [...baseData, { name: 'Q4 (Est)', revenue: 600000, profit: 140000 }, { name: 'Q1 Nxt (Est)', revenue: 750000, profit: 190000 }];
-  if (scenario === 'worst') return [...baseData, { name: 'Q4 (Est)', revenue: 470000, profit: 80000 }, { name: 'Q1 Nxt (Est)', revenue: 450000, profit: 75000 }];
-  
-  // expected
-  return [...baseData, { name: 'Q4 (Est)', revenue: 520000, profit: 110000 }, { name: 'Q1 Nxt (Est)', revenue: 580000, profit: 130000 }];
-};
+// Removed obsolete mock data generator function to streamline
 
 const CustomTooltip = ({ active, payload, label, currency }) => {
   if (active && payload && payload.length) {
@@ -44,10 +32,68 @@ const CustomTooltip = ({ active, payload, label, currency }) => {
 
 export default function ForecastPage() {
   const { currency } = useSettings();
+  const { analysis } = useAnalysis();
   const [scenario, setScenario] = useState("expected"); // best, expected, worst
   const [timeframe, setTimeframe] = useState("quarterly"); 
   
-  const rawData = useMemo(() => getMockData(scenario), [scenario]);
+  const generateYearlyData = (scn) => {
+    let yearlyData;
+    if (!analysis || !analysis.trend_data) {
+      // Mock yearly
+      const baseData = [
+        { period: '2022', revenue: 1600000, profit: 320000 },
+        { period: '2023', revenue: 1800000, profit: 360000 },
+      ];
+      if (scn === 'best') yearlyData = [...baseData, { period: '2024 (Est)', revenue: 2400000, profit: 540000 }];
+      else if (scn === 'worst') yearlyData = [...baseData, { period: '2024 (Est)', revenue: 1880000, profit: 320000 }];
+      else yearlyData = [...baseData, { period: '2024 (Est)', revenue: 2080000, profit: 440000 }];
+    } else {
+      yearlyData = analysis.trend_data.map(item => {
+        let r = item.revenue;
+        let p = item.profit;
+        if (item.forecast) {
+          if (scn === 'best') { r *= 1.15; p *= 1.25; } 
+          else if (scn === 'worst') { r *= 0.85; p *= 0.70; }
+        }
+        return { period: item.period + (item.forecast ? ' (Est)' : ''), revenue: r, profit: p };
+      });
+    }
+    return yearlyData;
+  };
+
+  const rawData = useMemo(() => {
+    const yearly = generateYearlyData(scenario);
+    if (timeframe === 'yearly') return yearly.map(y => ({ name: y.period, revenue: y.revenue, profit: y.profit }));
+    
+    const result = [];
+    yearly.forEach(year => {
+      const isEst = year.period.includes('(Est)');
+      const label = year.period.replace(' (Est)', '').replace('FY', '');
+      
+      if (timeframe === 'quarterly') {
+        ['Q1', 'Q2', 'Q3', 'Q4'].forEach(q => {
+          result.push({
+            name: `${q} ${label}${isEst ? '*' : ''}`,
+            revenue: year.revenue / 4,
+            profit: year.profit / 4
+          });
+        });
+      } else if (timeframe === 'monthly') {
+        ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].forEach(m => {
+           result.push({
+            name: `${m} '${label.slice(-2)}${isEst ? '*' : ''}`,
+            revenue: year.revenue / 12,
+            profit: year.profit / 12
+          });
+        });
+      }
+    });
+    
+    // For monthly, slice to keep chart cleanly legible to last 24 points
+    if (timeframe === 'monthly' && result.length > 24) return result.slice(-24);
+    
+    return result;
+  }, [scenario, analysis, timeframe]);
   
   const data = useMemo(() => {
     return rawData.map(item => ({
@@ -103,10 +149,10 @@ export default function ForecastPage() {
           
           <div className="glass p-5 rounded-xl border border-border relative overflow-hidden group">
             <div className="absolute top-0 right-0 w-24 h-24 bg-neon-purple/10 blur-xl -z-10 rounded-full" />
-            <p className="text-xs font-semibold uppercase text-muted-foreground tracking-wider mb-2">Projected Q4 Revenue</p>
+            <p className="text-xs font-semibold uppercase text-muted-foreground tracking-wider mb-2">Projected Status</p>
             <div className="flex items-end space-x-2">
               <h2 className="text-3xl font-bold text-foreground drop-shadow-sm">
-                {formatCurrency(data[3].revenue, currency)}
+                {formatCurrency(data[data.length - 1]?.revenue || 0, currency)}
               </h2>
               <span className={`text-sm font-semibold mb-1 flex items-center ${scenario === 'worst' ? 'text-neon-yellow' : 'text-neon-green'}`}>
                 <ArrowUpRight className="w-4 h-4 mr-0.5" />

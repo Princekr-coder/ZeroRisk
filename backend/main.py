@@ -282,7 +282,7 @@ class FinancialPredictor:
 
         return {
             "financial_health_score": health_score,
-            "bankruptcy_risk": {"probability": round(bankruptcy_prob * 100, 1), "level": risk_level},
+            "bankruptcy_risk": {"probability": round(bankruptcy_prob, 3), "level": risk_level},
             "investment_attractiveness": investment_score,
             "key_ratios": {k: round(v, 3) for k, v in features_dict.items()},
             "key_metrics": self._build_metric_summary(balance_df, pandl_df, features_dict),
@@ -351,7 +351,10 @@ async def analyze_financial_health(
 
 # ========================= OTHER ENDPOINTS =========================
 chat_sessions = {}
-chat_model = genai.GenerativeModel("gemini-2.5-flash")
+chat_model = genai.GenerativeModel(
+    "gemini-2.5-flash",
+    system_instruction="You are an expert financial AI assistant for the CredMetric dashboard. Keep all your responses extremely concise, strictly point-to-point, and easy to read. Avoid long paragraphs. Use brief, bulleted summaries whenever possible."
+)
 
 class ChatRequest(BaseModel):
     session_id: str
