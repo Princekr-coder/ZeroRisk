@@ -37,11 +37,12 @@ export const chatWithAI = async (sessionId, message) => {
   }
 };
 
-export const simulateWhatIf = async (revenueChange, debtChange) => {
+export const simulateWhatIf = async (revenueChange, debtChange, baseFeatures = {}) => {
   try {
     const response = await api.post("/what-if", {
       revenue_change: Number(revenueChange),
       debt_change: Number(debtChange),
+      base_features: baseFeatures,
     });
     return response.data;
   } catch (error) {

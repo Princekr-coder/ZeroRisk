@@ -55,7 +55,7 @@ class FinancialPredictor:
 
     def _train_synthetic_model(self):
         np.random.seed(42)
-        n_samples = 3000
+        n_samples = 800
         data = {
             'current_ratio': np.random.uniform(0.3, 5.0, n_samples),
             'quick_ratio': np.random.uniform(0.2, 4.5, n_samples),
@@ -69,54 +69,27 @@ class FinancialPredictor:
             'asset_turnover': np.random.uniform(0.4, 3.5, n_samples),
             'roe': np.random.uniform(-0.3, 0.6, n_samples),
             'interest_coverage': np.random.uniform(0.1, 15.0, n_samples),
-            'altman_z_approx': np.random.uniform(1.0, 5.0, n_samples),
+            'altman_z_approx': np.random.uniform(-2.0, 6.0, n_samples),
         }
         X = pd.DataFrame(data)
-        base_score = np.zeros(n_samples)
-
-        for i in range(n_samples):
-            cr = np.clip(data['current_ratio'][i], 0.5, 3)
-            qr = np.clip(data['quick_ratio'][i], 0.3, 3)
-            de = np.clip(data['debt_to_equity'][i], 0, 3)
-            dr = data['debt_ratio'][i]
-            gm = data['gross_margin'][i]
-            nm = data['net_margin'][i]
-            rg = data['revenue_growth_yoy'][i]
-            pg = data['profit_growth_yoy'][i]
-            opex = data['opex_growth'][i]
-            at = data['asset_turnover'][i]
-            roe = data['roe'][i]
-            ic = np.clip(data['interest_coverage'][i], 0, 10)
-            az = np.clip(data['altman_z_approx'][i], 1, 5)
-
-            score = 0
-            score += (cr - 0.5) / 2.5 * 20
-            score += (qr - 0.3) / 2.7 * 12
-            score += (3 - de) / 3 * 15
-            score += (0.6 - dr) / 0.6 * 12 if dr <= 0.6 else score + 12
-            score += gm * 25
-            score += nm * 30
-            score += (rg + 0.3) / 0.9 * 10
-            score += (pg + 0.5) / 1.5 * 8
-            score -= max(opex, 0) * 15
-            score += (at - 0.4) / 3.1 * 10
-            score += roe * 20
-            score += (ic / 10) * 8
-            score += (az - 1) / 4 * 15
-
-            base_score[i] = score
-
-        health_score = np.clip(base_score + np.random.normal(0, 6, n_samples), 10, 90)
-        health_score = np.clip(health_score, 0, 100)
-
-        self.model = RandomForestRegressor(
-            n_estimators=200,
-            max_depth=12,
-            min_samples_split=4,
-            min_samples_leaf=2,
-            random_state=42,
-            n_jobs=-1
+        base_score = 35 + (
+            10 * np.clip(data['current_ratio'], 0, 3) +
+            8 * np.clip(data['quick_ratio'], 0, 3) +
+            -15 * data['debt_to_equity'] +
+            -20 * data['debt_ratio'] +
+            15 * data['gross_margin'] +
+            15 * data['net_margin'] +
+            12 * data['revenue_growth_yoy'] +
+            8 * data['profit_growth_yoy'] +
+            -15 * data['opex_growth'] +
+            8 * data['asset_turnover'] +
+            12 * data['roe'] +
+            3 * np.clip(data['interest_coverage'], 0, 10) +
+            8 * np.clip(data['altman_z_approx'], 0, 6)
         )
+        health_score = np.clip(base_score + np.random.normal(0, 6, n_samples), 10, 95)
+
+        self.model = RandomForestRegressor(n_estimators=120, max_depth=8, random_state=42)
         self.model.fit(X, health_score)
         joblib.dump(self.model, self.model_path)
         self.feature_names = list(X.columns)
@@ -167,7 +140,7 @@ class FinancialPredictor:
                 1.2 * ((total_current_assets - total_current_liab) / total_assets) +
                 1.4 * (equity / total_assets) +
                 3.3 * (ebit / total_assets) +
-                0.6 * (equity / total_liab if total_liab > 0 else 1) +
+                0.6 * (equity / equity if equity > 0 else 1) +
                 (revenue / total_assets)
             ) if total_assets > 0 else 0.0
         }
@@ -235,15 +208,9 @@ class FinancialPredictor:
         }
 
     def _build_risk_breakdown(self, features_dict: Dict[str, float]):
-        debt_ratio = features_dict.get("debt_ratio", 0)
-        current_ratio = features_dict.get("current_ratio", 0)
-        net_margin = features_dict.get("net_margin", 0)
-        opex_growth = features_dict.get("opex_growth", 0)
-        revenue_growth = features_dict.get("revenue_growth_yoy", 0)
-
-        financial_risk = min(50.0, max(15.0, debt_ratio * 55 + (2 - min(current_ratio, 2)) * 12))
-        operational_risk = min(45.0, max(15.0, 25 - net_margin * 200 + max(opex_growth, 0) * 25))
-        market_risk = min(40.0, max(10.0, 20 - revenue_growth * 50))
+        financial_risk = min(55.0, max(18.0, features_dict.get("debt_ratio", 0.0) * 60 + (2 - min(features_dict.get("current_ratio", 0.0), 2)) * 10))
+        operational_risk = min(45.0, max(20.0, 30 - features_dict.get("net_margin", 0.0) * 25 + max(features_dict.get("opex_growth", 0.0), 0) * 30))
+        market_risk = max(10.0, 100.0 - financial_risk - operational_risk)
 
         total = financial_risk + operational_risk + market_risk
         return [
@@ -284,71 +251,20 @@ class FinancialPredictor:
         features_dict = self.extract_features(balance_df, pandl_df)
         X = pd.DataFrame([features_dict])
 
+        altman_z = features_dict.get('altman_z_approx', 0)
+        # Use a smooth logistic curve so it never mathematically flatlines at exactly 0.0
+        bankruptcy_prob = float(1.0 / (1.0 + np.exp((altman_z - 2.5) * 1.5)))
+        risk_level = "Low" if bankruptcy_prob < 0.15 else "Medium" if bankruptcy_prob < 0.40 else "High"
+
         health_score = float(self.model.predict(X)[0])
-
-        penalty = 0
-        bonus = 0
-
-        net_margin = features_dict.get("net_margin", 0)
-        current_ratio = features_dict.get("current_ratio", 0)
-        debt_ratio = features_dict.get("debt_ratio", 0)
-        interest_coverage = features_dict.get("interest_coverage", 0)
-        altman_z = features_dict.get("altman_z_approx", 0)
-
-        if net_margin < 0:
-            penalty += 15
-        elif net_margin > 0.15:
-            bonus += 5
-
-        if current_ratio < 1:
-            penalty += 12
-        elif current_ratio > 2:
-            bonus += 3
-
-        if debt_ratio > 0.7:
-            penalty += 12
-        elif debt_ratio < 0.3:
-            bonus += 5
-
-        if interest_coverage < 1:
-            penalty += 12
-        elif interest_coverage > 5:
-            bonus += 3
-
-        if altman_z < 1.8:
-            penalty += 15
-        elif altman_z > 3:
-            bonus += 5
-
-        health_score = health_score - penalty + bonus
-        health_score = max(5, min(95, round(health_score, 1)))
-
-        if altman_z > 3:
-            altman_risk = 0.1
-        elif altman_z > 2.5:
-            altman_risk = 0.2
-        elif altman_z > 1.8:
-            altman_risk = 0.4
-        else:
-            altman_risk = 0.75
-
-        bankruptcy_prob = (
-            ((100 - health_score) / 100) * 0.55 +
-            altman_risk * 0.45
-        )
-        bankruptcy_prob = round(max(0.0, min(1.0, bankruptcy_prob)), 3)
-
-        risk_level = (
-            "Low" if bankruptcy_prob < 0.25
-            else "Medium" if bankruptcy_prob < 0.55
-            else "High"
-        )
+        # Apply penalty multiplier if bankruptcy risk is severe (up to 50% deduction)
+        health_score = health_score * (1.0 - (bankruptcy_prob * 0.5))
+        health_score = max(0, min(100, round(health_score, 1)))
 
         investment_score = round(
-            health_score * 0.5 +
-            max(net_margin, 0) * 100 * 0.25 +
-            max(features_dict.get('revenue_growth_yoy', 0), 0) * 100 * 0.15 +
-            max(features_dict.get('interest_coverage', 0), 0) / 15 * 100 * 0.1,
+            health_score * 0.65 +
+            features_dict.get('net_margin', 0) * 100 * 0.15 +
+            features_dict.get('revenue_growth_yoy', 0) * 100 * 0.20,
             1
         )
         investment_score = max(0, min(100, investment_score))
@@ -391,16 +307,12 @@ class FinancialPredictor:
         return desc_map.get(feature, f"{feature} contributed {'positively' if positive else 'negatively'}")
 
     def _generate_overall_assessment(self, health: float, risk: str, invest: float) -> str:
-        if health >= 75 and risk == "Low":
+        if health >= 80:
             return "Strong financial health with low risk and high investment potential."
-        elif health >= 60 and risk in ("Low", "Medium"):
-            return "Healthy financial condition with manageable risk levels."
-        elif health >= 50:
-            return "Moderate financial condition. Improvement needed in key areas."
-        elif health >= 35:
-            return "Weak financial health. High risk and requires immediate attention."
+        elif health >= 60:
+            return "Moderate financial position. Good growth potential but monitor liquidity."
         else:
-            return "Financial distress detected. Critical risk and poor performance."
+            return "Financial distress signals detected. High bankruptcy risk - caution advised."
 
 
 predictor = FinancialPredictor()

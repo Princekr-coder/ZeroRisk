@@ -7,15 +7,35 @@ import { useRouter } from "next/navigation";
 import jsPDF from "jspdf";
 import * as htmlToImage from "html-to-image";
 import { MOCK_REPORTS } from "@/lib/reports";
+import { useAnalysis } from "@/components/AnalysisContext";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ReportTemplate } from "@/components/reports/ReportTemplate";
 
 export default function ReportsPage() {
   const router = useRouter();
+  const { analysis } = useAnalysis();
   const [downloadingId, setDownloadingId] = useState(null);
   const [reportToRender, setReportToRender] = useState(null);
   const hiddenReportRef = useRef(null);
+
+  const activeReport = analysis ? {
+    id: "REP-CURRENT",
+    date: new Date().toISOString().split('T')[0],
+    company: "Current Uploaded Analysis",
+    risk: analysis.bankruptcy_risk?.level || "Medium",
+    score: analysis.financial_health_score?.toFixed(1) || 0,
+    status: "Active",
+    metrics: { 
+      revenue: analysis.key_metrics?.revenue || 4200000, 
+      profit: analysis.key_metrics?.profit || 840000, 
+      debtToEq: analysis.key_ratios?.debt_to_equity?.toFixed(2) || 1.2, 
+      liquidity: analysis.key_ratios?.current_ratio?.toFixed(2) || 1.5 
+    },
+    insights: analysis.explanations?.map(e => e.feature) || ["Financial assessment completed"]
+  } : null;
+
+  const displayReports = activeReport ? [activeReport, ...MOCK_REPORTS] : MOCK_REPORTS;
 
   const handleDownload = async (e, report) => {
     e.stopPropagation();
@@ -58,7 +78,7 @@ export default function ReportsPage() {
         title="Analysis Reports"
         description="Historical archive of generated financial assessments."
       >
-        <button className="flex items-center space-x-2 px-4 py-2 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/20 rounded-lg text-sm font-bold tracking-wide transition-colors">
+        <button onClick={() => router.push('/upload')} className="flex items-center space-x-2 px-4 py-2 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/20 rounded-lg text-sm font-bold tracking-wide transition-colors">
           <Plus className="w-4 h-4" />
           <span>Generate New Report</span>
         </button>
@@ -78,7 +98,7 @@ export default function ReportsPage() {
               </tr>
             </thead>
             <tbody>
-              {MOCK_REPORTS.map((report, idx) => (
+              {displayReports.map((report, idx) => (
                 <motion.tr 
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
