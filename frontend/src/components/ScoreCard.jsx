@@ -18,7 +18,7 @@ export function ScoreCard({ title, value, status, description, icon: Icon }) {
         {Icon && <Icon className={cn("h-4 w-4", currentConfig.text)} />}
       </div>
       <div className="flex flex-col gap-1 mt-2">
-        <div className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-300">
+        <div className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-300">
            {value}
         </div>
         <div className="flex items-center space-x-2 mt-2">

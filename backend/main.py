@@ -72,22 +72,22 @@ class FinancialPredictor:
             'altman_z_approx': np.random.uniform(-2.0, 6.0, n_samples),
         }
         X = pd.DataFrame(data)
-        base_score = (
-            25 * np.clip(data['current_ratio'], 0, 3) +
-            15 * np.clip(data['quick_ratio'], 0, 3) +
-            -12 * data['debt_to_equity'] +
-            -10 * data['debt_ratio'] +
-            20 * data['gross_margin'] +
-            18 * data['net_margin'] +
-            22 * data['revenue_growth_yoy'] +
-            12 * data['profit_growth_yoy'] +
-            -8 * data['opex_growth'] +
-            10 * data['asset_turnover'] +
-            15 * data['roe'] +
-            8 * np.clip(data['interest_coverage'], 0, 10) +
-            18 * np.clip(data['altman_z_approx'], 0, 6)
+        base_score = 35 + (
+            10 * np.clip(data['current_ratio'], 0, 3) +
+            8 * np.clip(data['quick_ratio'], 0, 3) +
+            -15 * data['debt_to_equity'] +
+            -20 * data['debt_ratio'] +
+            15 * data['gross_margin'] +
+            15 * data['net_margin'] +
+            12 * data['revenue_growth_yoy'] +
+            8 * data['profit_growth_yoy'] +
+            -15 * data['opex_growth'] +
+            8 * data['asset_turnover'] +
+            12 * data['roe'] +
+            3 * np.clip(data['interest_coverage'], 0, 10) +
+            8 * np.clip(data['altman_z_approx'], 0, 6)
         )
-        health_score = np.clip(base_score + np.random.normal(0, 8, n_samples), 0, 100)
+        health_score = np.clip(base_score + np.random.normal(0, 6, n_samples), 10, 95)
 
         self.model = RandomForestRegressor(n_estimators=120, max_depth=8, random_state=42)
         self.model.fit(X, health_score)
@@ -251,12 +251,15 @@ class FinancialPredictor:
         features_dict = self.extract_features(balance_df, pandl_df)
         X = pd.DataFrame([features_dict])
 
-        health_score = float(self.model.predict(X)[0])
-        health_score = max(0, min(100, round(health_score, 1)))
-
         altman_z = features_dict.get('altman_z_approx', 0)
-        bankruptcy_prob = max(0.0, min(1.0, (3.0 - altman_z) / 6.0))
+        # Use a smooth logistic curve so it never mathematically flatlines at exactly 0.0
+        bankruptcy_prob = float(1.0 / (1.0 + np.exp((altman_z - 2.5) * 1.5)))
         risk_level = "Low" if bankruptcy_prob < 0.15 else "Medium" if bankruptcy_prob < 0.40 else "High"
+
+        health_score = float(self.model.predict(X)[0])
+        # Apply penalty multiplier if bankruptcy risk is severe (up to 50% deduction)
+        health_score = health_score * (1.0 - (bankruptcy_prob * 0.5))
+        health_score = max(0, min(100, round(health_score, 1)))
 
         investment_score = round(
             health_score * 0.65 +

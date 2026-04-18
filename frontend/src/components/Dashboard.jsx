@@ -131,7 +131,7 @@ export function Dashboard({ onReset }) {
           <ScoreCard 
             title="Investment Attractiveness"
             value={analysis.investment_attractiveness}
-            status={analysis.investment_attractiveness >= 75 ? "High" : "Low"}
+            status={analysis.investment_attractiveness >= 75 ? "High" : analysis.investment_attractiveness >= 50 ? "Medium" : "Low"}
             description="Attractiveness to potential investors"
             icon={Zap}
           />
